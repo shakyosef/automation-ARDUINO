@@ -1,0 +1,414 @@
+https://www.tinkercad.com/things/cFVzYFHDnpE-208837534316493808/editel?sharecode=zDKLIGw65ZVNVwRSVPLWXWd-aB0SQZ1a3fwHKPBgOCw
+
+/*
+הנחות
+אפשרות הכנסת האות אס על מנת לקבל את סיכום האירוע תתאפשר רק לאחר שהשריפה כובתה-
+מספר השניות שערך הכיבוי בפועל - רק הזמן בו הסרבו עובד ללא השהייה-
+גבול חיישן הגז היא הנחה שלנו-
+הנחנו שכאשר עוברות חמש שניות והרובוט לא מגיע לטפל באירוע תוצג למשתמש הודעה שהרובוט לא הגיע- 
+הרובוט ממשיך ללכת לטעינה כל עוד השריפה לא כובתה -
+הנחנו שהמשתמש יכול להכניס קלט של אות אחת בלבד- 
+ הנחנו כי הרובוט מתחיל לטפל באירוע לאחר סיום האזעקה-
+
+מצב קיצון:
+טיפלנו במצב שבו גם אות קטנה וגם אות גדולה תתקבל כאשר המשתמש מזין קלט-
+במידה והמוקד מעוניין להוסיף רובוטים בזמן טיפול השריפה ע"י -
+הסרבו זה מתאפשר תוך כדי הטיפול (תוך כדי סיבוב הסרבו) 
+במידה והמשתמש ביקש לקבל סיכום תוך כדי הטיפול,הסיכום- 
+יודפס בסיום כיבוי השריפה ללא צורך בבקשה חוזרת
+אם המשתמש מזין קלט לא חוקי - מודפסת הודעה- 
+*/
+
+
+#include <LiquidCrystal.h>
+#include <Servo.h>
+int servoPin=11; // חיבור סרבו
+Servo servo;
+short LedRedPin = 2;  // נורה אדומה
+short LedGrreenpin=7; // נורה ירוקה
+short LedBluePin = 4;  // נורה כחולה
+short GassensorPin = A0; // חיישן גז
+short GassensorValue=0; // אתחול ערך חיישן גז
+short TempsensorPin=A1; // חיבור חיישן טמפרטורה
+short TempsensorPinValue=0; // אתחול ערך חיישן טמפרטורה
+short piezoPin = 3;//  אזעקה
+const int pingPin=13; // - אולטרסאון חיישן מרחק
+int sensorThresh = 1050;// ערך סף של חיישן גז הנחה שלנו
+LiquidCrystal lcd(5,6,8,9,10,12);
+int celsius =0; // מעלות
+short angle = 0; // זווית של הסרבו
+//t time = 0;// למי?
+//t seconds =0;// הזמן לכיבוי השריפה 
+bool Spin = false; // אם הסרבו מסתובב או לא 
+long distance=0; // משתנים המאחסנים את מדידת הזמן והמרחק המחושב
+//int AmountOfWater = 0;// כמות המים 
+short bigervolume=10;//העלת עוצמת האזעקה י
+short volume=0;// חוזק האזעקה
+// bool havepoloshai=false;// לכתוב למי
+bool halperobot=false;// יש רובוט?
+unsigned long startServoTime=0;// זמן מנוע
+unsigned long  ShutdownTime = 0; //נכבתה השריפה
+unsigned long bazzerbign=0; // זמן התחלת האזעקה
+unsigned long airPollStart=0; // תחילת זיהום
+ bool ificaltorobot=false;// האם אני קראתי לרובוט 
+bool bazzer=false; // האם האזעקה עובדת
+short numofrobot=1; // מספר הרובוטים שהמשתמש מכניס
+char a; // התשובה אם רוצים או לא רובוט
+char ans;
+bool havezion=false; // אין זיהום
+long cm =0;
+int AmountWater = 0;// כמות המים 
+short howMachFire =0; // מוודא שאנחנו באותה שריפה
+bool notArrive =true;// האם הגיע רובוט לשריפה עד 5 שניות
+bool nitor = false;//האם הרובוט התחיל בטיפול השריפה
+unsigned long DurationEvent = 0; // משך האירוע
+short chargRobot = 0;//מספר הפעמים שהרובוט נטען
+unsigned long StartShuttingDown=0;
+
+void setup()
+{
+    Serial.begin(9600);
+    pinMode(piezoPin, OUTPUT);
+    pinMode(GassensorPin,INPUT);
+    pinMode(TempsensorPin,INPUT);
+    pinMode(LedRedPin, OUTPUT);
+    pinMode(LedGrreenpin, OUTPUT);
+    pinMode(LedBluePin, OUTPUT);
+    servo.attach(servoPin);
+    servo.write(0);
+    lcd.begin(16,2);           
+    lcd.clear();      
+    lcd.setCursor(10, 1);  
+  
+}
+
+void loop()
+{
+
+ CheckForInfection();
+  ledred();
+  needmoerobot();
+  MaxRobot();
+  stopAlarm();
+  temp ();
+  Summary();
+}
+
+
+
+void CheckForInfection () {
+   if (havezion==false)
+         {
+           havezion=Gas();// בדיקה אם יש זיהום אוויר
+         }
+  
+   if (havezion==true && bazzer==false)// אם יש זיהום אוויר
+    { 
+     if (((millis()/1000) - airPollStart) <5){
+         
+       ifcalbazzer();
+     }else{
+       if (notArrive==true){
+       Serial.println("didnt arrive"); // אם הרובוט לא הגיע אחרי 5 שניות
+         notArrive = false;
+     }
+     }
+       
+}
+}
+
+void ledred(){
+      
+    if ((analogRead(GassensorPin) <sensorThresh*0.3)&&(havezion==true))
+    {
+     lcd.clear();
+      // הנחה לא יורד ל30 אחוז מהר לכן אין דילאי
+      digitalWrite(LedRedPin, LOW);// מכבה נורה אדומה
+      DurationEvent =(millis()/1000);
+      havezion = false;
+      howMachFire =0; // ברגע שנגמרת השריפה התכנית מתאפסת ויכולה לזהות שריפה חדשה
+      //nitor =false;
+    }
+  }
+
+
+ bool Gas(){ 
+   
+      int gas_avalue=analogRead(GassensorPin);// קורא את ערך החישן
+     
+    if ( gas_avalue > sensorThresh*0.65)//בודק אם הגיע ל-זיהום אוויר מעל 65%
+      {  
+      
+      lcd.clear();
+      lcd.setCursor(0,0);           // set cursor to column 0, row 0 (the first row)
+    lcd.print("Air pollution"); 
+      lcd.setCursor(0,1);
+      lcd.print("alarm");    // change text to whatever you like. keep it clean!
+      digitalWrite(LedRedPin, HIGH);// מדליק נורה אדומה
+       airPollStart = (millis()/1000);
+      return true;
+      }
+  return false;
+ }
+
+void ifcalbazzer()// הפעלת האזעקה 
+{
+  int cm33=get_cm();
+  howMachFire =howMachFire+1;
+     if (bazzer==false)// בדיקה שהאזעקה עדין לא עובדת
+          {
+            
+            bazzer=true;
+            bazzerbign=millis()/1000;
+    
+            
+          }
+        
+  if (cm33 <100 )// אם המרחק קטן מ100 מטר צריך להפעיל האזעקה  
+       {
+            buzzer();
+    notArrive = false;
+    nitor = true;
+       }
+}
+
+
+
+void buzzer()
+{ 
+  if (bazzer==true&&howMachFire==1)
+  {
+ 
+  if ( ((millis()/1000)-bazzerbign)<7)// 7 שניות אזעקה
+  {
+      
+       tone (piezoPin,volume);// הדלקת האזעקה
+        volume=volume+bigervolume;// עוצמת האזעקה גדלה
+       if ( volume<=0 || volume>=100)
+        {
+           bigervolume= -bigervolume; // שמגיע למקסימום שיתחיל לרדת, שיגע למינימום שיתחיל לעלות האזעקה 
+         }
+  }
+ 
+    if (((millis()/1000)-bazzerbign)<6)// הזמן עכשיו פחות הזמן שהעזאקה התחילה אם עברו פחות מ-5 שניות אזי
+    {
+   
+      if (get_cm() >50)// אם המרחק גדול מ-50
+      {
+        if (ificaltorobot==false)// אם עדין לא קראתי לרובוט לעזרה
+        {
+           
+           Serial.println( "do you need more robot?");
+           ificaltorobot=true;
+        
+         // משנים את הערך על מנת שנדע שצריכים לקרוא לעזרה
+           
+           }
+        
+        }
+     }
+  }
+}
+
+void stopAlarm(){
+   if ( ((millis()/1000)-bazzerbign)>7)// דיקה אם עברו 7 שניות על מנת לכבות אזעקה
+   {
+     bazzer=false;
+      noTone(piezoPin);
+   }
+  
+}
+
+void needmoerobot() // קבלת קלט מהמשתמש להוספת רובוט
+{
+  
+  if ( ificaltorobot==true){
+ 	 if (Serial.available() > 0) {
+     a=Serial.read();
+       if (a=='y' ||a=='Y'||a=='N' || a=='n'){
+   		 if (a=='y' ||a=='Y' )
+     	{
+		  Serial.println (a);
+     	 numofrobot=numofrobot+1;// הוספת רובוט
+    	 }
+      
+   		 if (a=='N' || a=='n')
+    	{ 
+            Serial.println (a);
+    	}
+     ificaltorobot=false;// שינוי הערך על מנת שיקרא לרובוט פעם 1 במקרה שריפה
+	}else{
+     Serial.println("Invalid Value");
+           }
+  }
+  }
+}
+
+void MaxRobot()// תגבור מהמוקד כאשר יש זיהום אוויר
+{
+  if(havezion==true){
+  if (Serial.available() > 0){
+  ans=Serial.read();
+     
+  if (ans=='F' ||ans=='f' )
+  {
+    Serial.println (ans);
+   	 if (numofrobot <5){
+      
+      numofrobot=numofrobot+1;// הוספת רובוט
+       	 
+   	 }else{
+   	   Serial.println( "cant add more robots");
+   	 }
+  }else{
+     Serial.println("Invalid Value");
+  }
+  }
+  }
+}
+
+
+long get_cm() { // בדיקת מרחק
+  long duration, cm1;
+  pinMode(pingPin, OUTPUT);
+  digitalWrite(pingPin, LOW);
+  delayMicroseconds(2);
+  digitalWrite(pingPin, HIGH);
+  delayMicroseconds(5);
+  digitalWrite(pingPin, LOW);
+
+  pinMode(pingPin, INPUT);
+  duration = pulseIn(pingPin, HIGH);
+  cm1 = microsecondsToCentimeters(duration);
+  
+return cm1;
+}
+
+long microsecondsToCentimeters(long microseconds) {
+  return microseconds / 29 / 2;
+}
+
+
+void temp(){//בדיקת טמפרטורה
+  if (nitor == true){
+  TempsensorPinValue= analogRead(TempsensorPin);
+  int gass =analogRead(GassensorPin);
+     int  maxTemp = 120;
+     celsius = map(((TempsensorPinValue - 20) * 3.04), 0, 1023, -40, 125); 
+  
+  if ((celsius > maxTemp)&&(analogRead(GassensorPin) >sensorThresh*0.3)){
+ // הרובוט הגיע לשריפה
+    lcd.clear();  
+    lcd.setCursor(0,0);          
+        lcd.print("The Robot arrived");
+
+     if((gass > sensorThresh*0.3)){ // אם הזיהום גדול מ30 תתחיל לסובב את הסרבו
+     Spin = true;
+       servoFireOf(gass);
+     }else{
+        Spin = false;
+     }
+  }
+}
+}
+
+void servoFireOf (int gas_avalue){//סיבוב הסרבו
+    if (Spin){
+      startServoTime = millis();//מתעדכן בטעינה
+      StartShuttingDown= millis();//זמן מתחילת הכיבוי
+      
+      for(angle = 0; ((angle <= 180)&&(Spin == true)) ; angle++) // סיבוב לכיוון החיובי
+      {
+           servo.write(angle);
+           MaxRobot();
+       	 digitalWrite(LedGrreenpin, HIGH); // set the led on
+    	   delay(100); // wait for a second
+   	       digitalWrite(LedGrreenpin, LOW); // turn the LED off
+    	   delay(100); // wait for a second
+        int gas1 = analogRead(GassensorPin);
+        if((gas1 > sensorThresh*0.3)) {
+           Spin = true;
+          if ((millis()-startServoTime)>5000){
+            Charging();// אם עברו יותר מ5 שניות הרובוט נטען
+          }
+        }else{
+			 Spin = false;
+        }
+          }
+         for(angle = 180; ((angle <= 180)&&(Spin == true)); angle--) // סיבוב לכיוון השלילי
+         {
+           servo.write(angle);      
+           MaxRobot();
+           digitalWrite(LedGrreenpin, HIGH); // set the led on
+           delay(100); // wait
+           digitalWrite(LedGrreenpin, LOW); // turn the LED off
+           delay(100); // wait 
+             if((gas_avalue > sensorThresh*0.3)) {
+              
+           		Spin = true;
+                if ((millis()-startServoTime)>5000){
+           		 Charging();// אם עברו יותר מ5 שניות הרובוט נטען
+          		}
+        }else{
+			 Spin = false;
+              
+        }
+           if ((millis()-startServoTime)<5000){
+             Spin = true;
+           }else{
+             Spin = false;
+             Charging();
+             
+           }
+         }
+    ShutdownTime= (millis()-StartShuttingDown)/1000;//חישוב זמן הכיבוי 
+      howMachWater();
+      
+    
+  }
+}
+
+
+void howMachWater () { // חישוב כמות המים 
+ AmountWater = (ShutdownTime*10*numofrobot);
+}
+
+void Charging (){
+      digitalWrite(LedBluePin, HIGH);
+	lcd.clear();
+  lcd.setCursor(0,0);
+  	lcd.print("Charging");
+  delay (3000);
+    digitalWrite(LedBluePin, LOW);
+  lcd.clear();
+  startServoTime =millis(); //עדכון זמן על מנת לחזור להטענה לאחר 5 שניות 
+  chargRobot=chargRobot+1;
+}
+
+void Summary (){
+   if(havezion==false){
+  if (Serial.available() > 0){
+  char sum =Serial.read();
+ 
+  if (sum=='s' ||sum=='S' )
+  {
+       Serial.println (sum);
+   	   Serial.print( "Event Duration:");
+       Serial.println((DurationEvent-airPollStart) );
+  	  Serial.print( "Number of robots participating in the event:");
+      Serial.println(numofrobot );
+      Serial.print( "Number of seconds actually shutting down:");
+      Serial.println((ShutdownTime-(3*chargRobot)) );
+      Serial.print( "Amount of water consumed in treatment:");
+      Serial.println(AmountWater );
+  	  Serial.print( "The number of times the robot stayed:");
+      Serial.println(chargRobot);
+ 
+  }else{
+     Serial.println("Invalid Value");
+  }
+  }
+   }
+}
+  
+
